@@ -1,0 +1,80 @@
+# Multi-platform cross-compilation for Rust Excel Parser
+# Supports Linux, Windows, and macOS targets
+FROM rust:1.80-slim
+
+# Install cross-compilation dependencies including macOS toolchain
+RUN apt-get update && apt-get install -y \
+    gcc-mingw-w64 \
+    gcc-aarch64-linux-gnu \
+    gcc-x86-64-linux-gnu \
+    clang \
+    cmake \
+    curl \
+    git \
+    libssl-dev \
+    libxml2-dev \
+    pkg-config \
+    libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install osxcross for macOS cross-compilation
+WORKDIR /tmp
+RUN git clone https://github.com/tpoechtrager/osxcross.git && \
+    cd osxcross && \
+    curl -L -o tarballs/MacOSX12.3.sdk.tar.xz \
+    "https://github.com/joseluisq/macosx-sdks/releases/download/12.3/MacOSX12.3.sdk.tar.xz" && \
+    UNATTENDED=yes OSX_VERSION_MIN=10.7 ./build.sh && \
+    cp -r target/bin/* /usr/local/bin/ && \
+    cp -r target/lib/* /usr/local/lib/ && \
+    rm -rf /tmp/osxcross
+
+# Add Rust targets for all platforms
+RUN rustup target add \
+    x86_64-unknown-linux-gnu \
+    aarch64-unknown-linux-gnu \
+    x86_64-pc-windows-gnu \
+    x86_64-apple-darwin \
+    aarch64-apple-darwin
+
+# Configure cross-compilation linkers
+ENV CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=x86_64-linux-gnu-gcc
+ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+ENV CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=x86_64-w64-mingw32-gcc
+ENV CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER=x86_64-apple-darwin20.4-clang
+ENV CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER=aarch64-apple-darwin20.4-clang
+
+# Set macOS SDK path
+ENV OSXCROSS_ROOT=/usr/local
+ENV PATH="$OSXCROSS_ROOT/bin:$PATH"
+
+WORKDIR /app
+COPY . .
+
+# Remove lock file and let Cargo regenerate it
+RUN rm -f Cargo.lock
+
+# Build script that creates all platform binaries
+RUN echo "🔨 Building for all platforms..." && \
+    cargo build --release --target x86_64-unknown-linux-gnu && \
+    echo "✅ Linux x86_64 completed" && \
+    cargo build --release --target aarch64-unknown-linux-gnu && \
+    echo "✅ Linux ARM64 completed" && \
+    cargo build --release --target x86_64-pc-windows-gnu && \
+    echo "✅ Windows x86_64 completed" && \
+    cargo build --release --target x86_64-apple-darwin && \
+    echo "✅ macOS x86_64 completed" && \
+    cargo build --release --target aarch64-apple-darwin && \
+    echo "✅ macOS ARM64 completed"
+
+# Copy all binaries to output directory with proper naming
+RUN mkdir -p /output && \
+    cp target/x86_64-unknown-linux-gnu/release/librust_excel_parser.so /output/librust_excel_parser-x86_64-unknown-linux-gnu.so && \
+    cp target/aarch64-unknown-linux-gnu/release/librust_excel_parser.so /output/librust_excel_parser-aarch64-unknown-linux-gnu.so && \
+    cp target/x86_64-pc-windows-gnu/release/rust_excel_parser.dll /output/rust_excel_parser-x86_64-pc-windows-gnu.dll && \
+    cp target/x86_64-apple-darwin/release/librust_excel_parser.dylib /output/librust_excel_parser-x86_64-apple-darwin.dylib && \
+    cp target/aarch64-apple-darwin/release/librust_excel_parser.dylib /output/librust_excel_parser-aarch64-apple-darwin.dylib
+
+# Display final output
+RUN echo "📦 All platform binaries built:" && ls -la /output/
+
+CMD ["ls", "-la", "/output/"]
