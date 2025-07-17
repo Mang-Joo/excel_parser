@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'java-library'
     id 'maven-publish'
 }
 
@@ -18,7 +19,7 @@ repositories {
 
 dependencies {
     // Jackson for JSON/MessagePack serialization (Java 8 compatible version)
-    implementation 'com.fasterxml.jackson.core:jackson-databind:2.12.7'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.13.4.2'
     implementation 'org.msgpack:jackson-dataformat-msgpack:0.8.22'
 
     testImplementation 'junit:junit:4.13.2'
@@ -28,10 +29,21 @@ test {
     // Using JUnit 4
 }
 
-// Include native libraries in JAR
+// Include native libraries and all dependencies in JAR
 jar {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    
     from('src/main/resources') {
         include 'native/**'
     }
+    
+    // Include all runtime dependencies
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    
+    manifest {
+        attributes 'Main-Class': 'io.github.mangjoo.ExcelParser'
+    }
 }
+
