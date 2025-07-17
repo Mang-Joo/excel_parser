@@ -12,3 +12,10 @@ calamine = "0.25"
 jni = "0.21"
 serde = { version = "1.0", features = ["derive"] }
 rmp-serde = "1.1"
+
+[profile.release]
+opt-level = "z"     # Optimize for size
+lto = true          # Link Time Optimization
+codegen-units = 1   # Single codegen unit for better optimization
+strip = true        # Strip symbols
+panic = "abort"     # Smaller panic handler
