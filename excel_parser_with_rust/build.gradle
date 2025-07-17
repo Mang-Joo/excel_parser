@@ -24,10 +24,6 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
 }
 
-application {
-    mainClass = 'io.github.mangjoo.examples.RawDataExample'
-}
-
 test {
     // Using JUnit 4
 }
