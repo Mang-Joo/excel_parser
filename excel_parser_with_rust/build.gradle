@@ -1,0 +1,33 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'io.github.mangjoo'
+version = '1.0-SNAPSHOT'
+
+// Java 8 compatibility settings
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Jackson for JSON/MessagePack serialization (Java 8 compatible version)
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.12.7'
+    implementation 'org.msgpack:jackson-dataformat-msgpack:0.8.22'
+    
+    testImplementation 'junit:junit:4.13.2'
+}
+
+application {
+    mainClass = 'io.github.mangjoo.examples.RawDataExample'
+}
+
+test {
+    // Using JUnit 4
+}
