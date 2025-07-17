@@ -1,6 +1,7 @@
 plugins {
     id 'java'
     id 'application'
+    id 'maven-publish'
 }
 
 group = 'io.github.mangjoo'
@@ -26,4 +27,12 @@ dependencies {
 
 test {
     // Using JUnit 4
+}
+
+// Include native libraries in JAR
+jar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from('src/main/resources') {
+        include 'native/**'
+    }
 }
