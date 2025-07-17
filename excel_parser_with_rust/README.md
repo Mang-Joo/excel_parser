@@ -13,22 +13,6 @@ This Java library provides a simple and efficient way to parse Excel files using
 - 🌍 **Cross-Platform**: Works on Windows, macOS, and Linux
 - 💾 **Memory Efficient**: Optimized with MessagePack serialization
 
-## 📦 Installation
-
-### Maven
-```xml
-<dependency>
-    <groupId>io.github.mangjoo</groupId>
-    <artifactId>excel-parser-rust</artifactId>
-    <version>1.0.0</version>
-</dependency>
-```
-
-### Gradle
-```gradle
-implementation 'io.github.mangjoo:excel-parser-rust:1.0.0'
-```
-
 ## 🚀 Quick Start
 
 ### Basic Usage (Raw Data)
