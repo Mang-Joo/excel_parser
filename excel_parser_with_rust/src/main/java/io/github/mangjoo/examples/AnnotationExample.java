@@ -17,9 +17,13 @@ public class AnnotationExample {
             
             // 1. Simple mapping to Person objects
             System.out.println("1. Person Object Mapping:");
-            // Specify file location with absolute path
-            String filePath = "/Users/wj/I_workspace/excel_parser_with_rust/src/main/resources/exmaple.xlsx";
-            List<Person> people = parser.parseToList(filePath, Person.class);
+            // Copy resource to temp file for reading
+            java.io.InputStream is = AnnotationExample.class.getClassLoader().getResourceAsStream("exmaple.xlsx");
+            java.nio.file.Path tempFile = java.nio.file.Files.createTempFile("example", ".xlsx");
+            java.nio.file.Files.copy(is, tempFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            is.close();
+            
+            List<Person> people = parser.parseToList(tempFile.toString(), Person.class);
             
             for (Person person : people) {
                 System.out.println("  " + person);

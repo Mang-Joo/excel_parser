@@ -17,7 +17,12 @@ public class RawDataExample {
     public static void main(String[] args) {
         try {
             ExcelParser parser = new ExcelParser();
-            String filePath = "/Users/wj/I_workspace/excel_parser_with_rust/src/main/resources/exmaple.xlsx";
+            // Copy resource to temp file for reading
+            java.io.InputStream is = RawDataExample.class.getClassLoader().getResourceAsStream("exmaple.xlsx");
+            java.nio.file.Path tempFile = java.nio.file.Files.createTempFile("example", ".xlsx");
+            java.nio.file.Files.copy(is, tempFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            is.close();
+            String filePath = tempFile.toString();
             
             System.out.println("=== Raw Data Excel Parsing Example ===\n");
             
