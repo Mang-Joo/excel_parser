@@ -1,7 +1,8 @@
 use crate::messagepack_converter::MessagePackConverter;
 use crate::parser::ExcelParser;
-use jni::objects::{JClass, JString};
-use jni::sys::jbyteArray;
+use crate::writer::{ExcelWriter, WriteConfig};
+use jni::objects::{JClass, JString, JByteArray};
+use jni::sys::{jbyteArray, jboolean};
 use jni::JNIEnv;
 
 // Helper function to convert bytes to Java byte array
@@ -99,5 +100,105 @@ pub extern "system" fn Java_io_github_mangjoo_ExcelParser_readSheet<'local>(
             }
         }
         Err(_) => std::ptr::null_mut(),
+    }
+}
+
+// Helper function to convert Java byte array to bytes
+fn java_array_to_bytes(env: &mut JNIEnv, array: jbyteArray) -> Option<Vec<u8>> {
+    if array.is_null() {
+        return None;
+    }
+    
+    // Create JByteArray from raw pointer
+    let j_array: JByteArray = unsafe { JByteArray::from_raw(array) };
+    
+    // Get array length
+    let len = match env.get_array_length(&j_array) {
+        Ok(l) => l,
+        Err(_) => return None,
+    };
+    
+    // Create a buffer to hold the bytes
+    let mut bytes = vec![0i8; len as usize];
+    
+    // Copy the Java array into our buffer
+    match env.get_byte_array_region(&j_array, 0, &mut bytes) {
+        Ok(_) => {
+            // Convert i8 to u8
+            Some(bytes.iter().map(|&b| b as u8).collect())
+        }
+        Err(_) => None,
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_github_mangjoo_ExcelParser_writeExcel<'local>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    file_path: JString<'local>,
+    config_bytes: jbyteArray,
+) -> jboolean {
+    let path = match get_string_from_java(&mut env, &file_path) {
+        Some(p) => p,
+        None => return 0, // false
+    };
+    
+    let bytes = match java_array_to_bytes(&mut env, config_bytes) {
+        Some(b) => b,
+        None => return 0, // false
+    };
+    
+    let config: WriteConfig = match MessagePackConverter::write_config_from_bytes(&bytes) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Failed to deserialize WriteConfig: {:?}", e);
+            return 0; // false
+        }
+    };
+    
+    eprintln!("WriteConfig: sheet_name={}, headers={}, rows={}", 
+        config.sheet_name, config.headers.len(), config.data.len());
+    
+    let writer = ExcelWriter::new(path.clone());
+    
+    match writer.write_data(&config) {
+        Ok(_) => {
+            eprintln!("Successfully wrote Excel file: {}", path);
+            1 // true
+        }
+        Err(e) => {
+            eprintln!("Failed to write Excel file: {:?}", e);
+            0 // false
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_github_mangjoo_ExcelParser_writeMultipleSheets<'local>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    file_path: JString<'local>,
+    configs_bytes: jbyteArray,
+) -> jboolean {
+    let path = match get_string_from_java(&mut env, &file_path) {
+        Some(p) => p,
+        None => return 0, // false
+    };
+    
+    let bytes = match java_array_to_bytes(&mut env, configs_bytes) {
+        Some(b) => b,
+        None => return 0, // false
+    };
+    
+    let configs: Vec<WriteConfig> = match MessagePackConverter::write_configs_from_bytes(&bytes) {
+        Ok(c) => c,
+        Err(_) => return 0, // false
+    };
+    
+    let writer = ExcelWriter::new(path);
+    
+    match writer.write_multiple_sheets(configs) {
+        Ok(_) => 1, // true
+        Err(_) => 0, // false
     }
 }

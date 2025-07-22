@@ -1,6 +1,10 @@
 pub mod jni_wrapper;
 pub mod messagepack_converter;
 pub mod parser;
+pub mod writer;
+
+#[cfg(test)]
+mod test_writer;
 
 #[cfg(test)]
 mod tests {
