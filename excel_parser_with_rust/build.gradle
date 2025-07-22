@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'io.github.mangjoo'
-version = '0.1.0'
+version = '0.2.0'
 
 // Java 8 compatibility settings
 java {
@@ -48,7 +48,7 @@ jar {
 }
 
 // Generate POM file
-task generatePom {
+tasks.register('generatePom') {
     doLast {
         def pomFile = file("$buildDir/libs/${project.name}-${project.version}.pom")
         pomFile.text = """<?xml version="1.0" encoding="UTF-8"?>
