@@ -1,12 +1,16 @@
 package io.github.mangjoo;
 
 import io.github.mangjoo.annotations.ExcelColumn;
+import io.github.mangjoo.annotations.ExcelReadColumn;
+import io.github.mangjoo.annotations.ExcelReadWrite;
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Annotation-based Excel data mapping class
@@ -25,8 +29,8 @@ public class ExcelMapper {
             return new ArrayList<>();
         }
 
-        // Collect field-column mapping information for the class
-        Map<String, FieldMapping> fieldMappings = analyzeClass(clazz);
+        // Collect field mappings information for the class
+        List<FieldMappingInfo> fieldMappings = analyzeClassFields(clazz);
 
         List<T> result = new ArrayList<>();
 
@@ -50,7 +54,7 @@ public class ExcelMapper {
      * Convert single row to object
      */
     public static <T> T mapToObject(Map<String, String> row, Class<T> clazz) {
-        Map<String, FieldMapping> fieldMappings = analyzeClass(clazz);
+        List<FieldMappingInfo> fieldMappings = analyzeClassFields(clazz);
         try {
             return createObject(row, clazz, fieldMappings);
         } catch (Exception e) {
@@ -61,42 +65,86 @@ public class ExcelMapper {
         }
     }
 
-    private static <T> Map<String, FieldMapping> analyzeClass(Class<T> clazz) {
-        Map<String, FieldMapping> mappings = new HashMap<>();
+    private static <T> List<FieldMappingInfo> analyzeClassFields(Class<T> clazz) {
+        List<FieldMappingInfo> mappings = new ArrayList<>();
 
         Field[] fields = clazz.getDeclaredFields();
         for (Field field : fields) {
-            ExcelColumn annotation = field.getAnnotation(ExcelColumn.class);
-            if (annotation != null) {
-                field.setAccessible(true);
-                String columnName = annotation.value();
-                mappings.put(columnName, new FieldMapping(field, annotation));
+            field.setAccessible(true);
+            
+            // Check for ExcelColumn (legacy support)
+            ExcelColumn columnAnnotation = field.getAnnotation(ExcelColumn.class);
+            if (columnAnnotation != null) {
+                FieldMappingInfo info = new FieldMappingInfo(field);
+                info.addColumnName(columnAnnotation.value());
+                info.setRequired(columnAnnotation.required());
+                info.setDefaultValue(columnAnnotation.defaultValue());
+                mappings.add(info);
+                continue;
+            }
+            
+            // Check for ExcelReadColumn
+            ExcelReadColumn readAnnotation = field.getAnnotation(ExcelReadColumn.class);
+            if (readAnnotation != null) {
+                FieldMappingInfo info = new FieldMappingInfo(field);
+                info.addColumnName(readAnnotation.value());
+                // Add aliases
+                for (String alias : readAnnotation.aliases()) {
+                    info.addColumnName(alias);
+                }
+                info.setRequired(readAnnotation.required());
+                info.setDefaultValue(readAnnotation.defaultValue());
+                mappings.add(info);
+                continue;
+            }
+            
+            // Check for ExcelReadWrite
+            ExcelReadWrite readWriteAnnotation = field.getAnnotation(ExcelReadWrite.class);
+            if (readWriteAnnotation != null && !readWriteAnnotation.skip()) {
+                FieldMappingInfo info = new FieldMappingInfo(field);
+                info.addColumnName(readWriteAnnotation.value());
+                // Add read aliases
+                for (String alias : readWriteAnnotation.readAliases()) {
+                    info.addColumnName(alias);
+                }
+                info.setRequired(readWriteAnnotation.required());
+                info.setDefaultValue(readWriteAnnotation.defaultValue());
+                mappings.add(info);
             }
         }
 
         return mappings;
     }
 
-    private static <T> T createObject(Map<String, String> row, Class<T> clazz, Map<String, FieldMapping> fieldMappings)
+    private static <T> T createObject(Map<String, String> row, Class<T> clazz, List<FieldMappingInfo> fieldMappings)
             throws Exception {
 
         T instance = clazz.getDeclaredConstructor().newInstance();
 
-        for (Map.Entry<String, FieldMapping> entry : fieldMappings.entrySet()) {
-            String columnName = entry.getKey();
-            FieldMapping mapping = entry.getValue();
-            Field field = mapping.field;
-            ExcelColumn annotation = mapping.annotation;
-
-            String value = row.get(columnName);
-
-            // Handle case when value is missing
+        // Process each field
+        for (FieldMappingInfo fieldInfo : fieldMappings) {
+            String value = null;
+            String foundColumnName = null;
+            
+            // Try to find a value using any of the possible column names
+            for (String columnName : fieldInfo.getColumnNames()) {
+                if (row.containsKey(columnName)) {
+                    value = row.get(columnName);
+                    foundColumnName = columnName;
+                    break;
+                }
+            }
+            
+            // Handle case when value is missing or empty
             if (value == null || value.trim().isEmpty()) {
-                if (!annotation.defaultValue().isEmpty()) {
-                    value = annotation.defaultValue();
-                } else if (annotation.required()) {
+                if (!fieldInfo.getDefaultValue().isEmpty()) {
+                    value = fieldInfo.getDefaultValue();
+                } else if (fieldInfo.isRequired()) {
+                    // Create a helpful error message listing all possible column names
+                    String columnNames = String.join("' or '", fieldInfo.getColumnNames());
                     throw new ExcelMappingException(
-                        "Required column '" + columnName + "' is missing or empty"
+                        "Required column '" + columnNames + "' is missing or empty for field " + 
+                        fieldInfo.getField().getName()
                     );
                 } else {
                     continue; // Leave optional fields as null
@@ -104,8 +152,9 @@ public class ExcelMapper {
             }
 
             // Type conversion and field setting
-            Object convertedValue = convertValue(value.trim(), field.getType(), columnName);
-            field.set(instance, convertedValue);
+            Object convertedValue = convertValue(value.trim(), fieldInfo.getField().getType(), 
+                foundColumnName != null ? foundColumnName : fieldInfo.getColumnNames().iterator().next());
+            fieldInfo.getField().set(instance, convertedValue);
         }
 
         return instance;
@@ -142,14 +191,46 @@ public class ExcelMapper {
             );
         }
     }
-
-    private static class FieldMapping {
-        final Field field;
-        final ExcelColumn annotation;
-
-        FieldMapping(Field field, ExcelColumn annotation) {
+    
+    /**
+     * Helper class to store field mapping information
+     */
+    private static class FieldMappingInfo {
+        private final Field field;
+        private final Set<String> columnNames = new HashSet<>();
+        private boolean required = true;
+        private String defaultValue = "";
+        
+        FieldMappingInfo(Field field) {
             this.field = field;
-            this.annotation = annotation;
+        }
+        
+        void addColumnName(String name) {
+            columnNames.add(name);
+        }
+        
+        Set<String> getColumnNames() {
+            return columnNames;
+        }
+        
+        Field getField() {
+            return field;
+        }
+        
+        boolean isRequired() {
+            return required;
+        }
+        
+        void setRequired(boolean required) {
+            this.required = required;
+        }
+        
+        String getDefaultValue() {
+            return defaultValue;
+        }
+        
+        void setDefaultValue(String defaultValue) {
+            this.defaultValue = defaultValue;
         }
     }
 
