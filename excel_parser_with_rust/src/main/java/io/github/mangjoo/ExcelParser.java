@@ -2,6 +2,7 @@ package io.github.mangjoo;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.msgpack.jackson.dataformat.MessagePackFactory;
+import io.github.mangjoo.writer.WriteConfig;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -36,6 +37,8 @@ public class ExcelParser {
     private static native byte[] getHeaders(String filePath);
     private static native byte[] readExcel(String filePath);
     private static native byte[] readSheet(String filePath, String sheetName);
+    private static native boolean writeExcel(String filePath, byte[] configBytes);
+    private static native boolean writeMultipleSheets(String filePath, byte[] configsBytes);
 
     /**
      * Returns column headers from Excel file
@@ -204,5 +207,82 @@ public class ExcelParser {
     public <T> List<T> mapToList(SheetData sheet, Class<T> clazz) {
         List<Map<String, String>> rows = sheet.getAllRowsAsMap();
         return ExcelMapper.mapToObjects(rows, clazz);
+    }
+    
+    // === Write Methods ===
+    
+    /**
+     * Write objects to Excel file using annotation-based mapping.
+     * 
+     * @param filePath Target Excel file path
+     * @param data List of objects to write
+     * @param clazz Class type of the objects
+     * @return true if successful, false otherwise
+     * @throws IOException if write fails
+     */
+    public <T> boolean writeExcel(String filePath, List<T> data, Class<T> clazz) throws IOException {
+        return writeExcel(filePath, data, clazz, "Sheet1");
+    }
+    
+    /**
+     * Write objects to Excel file with specific sheet name.
+     * 
+     * @param filePath Target Excel file path
+     * @param data List of objects to write
+     * @param clazz Class type of the objects
+     * @param sheetName Sheet name
+     * @return true if successful, false otherwise
+     * @throws IOException if write fails
+     */
+    public <T> boolean writeExcel(String filePath, List<T> data, Class<T> clazz, String sheetName) throws IOException {
+        WriteConfig config = ExcelWriter.createWriteConfig(data, clazz, sheetName);
+        return writeExcelWithConfig(filePath, config);
+    }
+    
+    /**
+     * Write Excel using a pre-configured WriteConfig.
+     * 
+     * @param filePath Target Excel file path
+     * @param config Write configuration
+     * @return true if successful, false otherwise
+     * @throws IOException if write fails
+     */
+    public boolean writeExcelWithConfig(String filePath, WriteConfig config) throws IOException {
+        byte[] configBytes = msgpackMapper.writeValueAsBytes(config);
+        boolean result = writeExcel(filePath, configBytes);
+        if (!result) {
+            throw new IOException("Failed to write Excel file: " + filePath);
+        }
+        return true;
+    }
+    
+    /**
+     * Write multiple sheets to Excel file.
+     * 
+     * @param filePath Target Excel file path
+     * @param configs List of write configurations (one per sheet)
+     * @return true if successful, false otherwise
+     * @throws IOException if write fails
+     */
+    public boolean writeMultipleSheetsWithConfig(String filePath, List<WriteConfig> configs) throws IOException {
+        byte[] configsBytes = msgpackMapper.writeValueAsBytes(configs);
+        boolean result = writeMultipleSheets(filePath, configsBytes);
+        if (!result) {
+            throw new IOException("Failed to write Excel file with multiple sheets: " + filePath);
+        }
+        return result;
+    }
+    
+    /**
+     * Create a WriteConfig from objects for manual configuration.
+     * This allows customization before writing.
+     * 
+     * @param data List of objects to write
+     * @param clazz Class type of the objects
+     * @param sheetName Sheet name
+     * @return WriteConfig that can be customized before writing
+     */
+    public <T> WriteConfig prepareWriteConfig(List<T> data, Class<T> clazz, String sheetName) {
+        return ExcelWriter.createWriteConfig(data, clazz, sheetName);
     }
 }
